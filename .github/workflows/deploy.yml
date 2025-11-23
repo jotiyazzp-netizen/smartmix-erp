@@ -55,17 +55,18 @@ jobs:
             set -e
             ACR_HOST="crpi-vvd63gd4gtn8gczl.cn-hangzhou.personal.cr.aliyuncs.com"
             ACR_NAMESPACE="${{ secrets.ACR_NAMESPACE }}"
-          PROJECT_DIR="${{ secrets.PROJECT_DIR }}"
-          DOMAIN_API_RAW="${{ secrets.DOMAIN_API }}"
-          DOMAIN_APP_RAW="${{ secrets.DOMAIN_APP }}"
-          DOMAIN_API_HOST="$(echo "$DOMAIN_API_RAW" | sed -E 's#^https?://##; s#/*$##')"
-          DOMAIN_APP_HOST="$(echo "$DOMAIN_APP_RAW" | sed -E 's#^https?://##; s#/*$##')"
-          MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
+            PROJECT_DIR="${{ secrets.PROJECT_DIR }}"
+            DOMAIN_API_RAW="${{ secrets.DOMAIN_API }}"
+            DOMAIN_APP_RAW="${{ secrets.DOMAIN_APP }}"
+            DOMAIN_API_HOST="$(echo "$DOMAIN_API_RAW" | sed -E 's#^https?://##; s#/*$##')"
+            DOMAIN_APP_HOST="$(echo "$DOMAIN_APP_RAW" | sed -E 's#^https?://##; s#/*$##')"
+            MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
+            GIT_REPO_URL="https://github.com/jotiyazzp-netizen/smartmix-erp.git"
 
-          BACKEND_IMAGE="$ACR_HOST/$ACR_NAMESPACE/smartmix-backend:latest"
-          WEB_IMAGE="$ACR_HOST/$ACR_NAMESPACE/smartmix-web:latest"
+            BACKEND_IMAGE="$ACR_HOST/$ACR_NAMESPACE/smartmix-backend:latest"
+            WEB_IMAGE="$ACR_HOST/$ACR_NAMESPACE/smartmix-web:latest"
 
-          mkdir -p "$PROJECT_DIR/deploy" "$PROJECT_DIR/deploy/caddy"
+            mkdir -p "$PROJECT_DIR/deploy" "$PROJECT_DIR/deploy/caddy"
 
           echo "Login ACR on ECS: $ACR_HOST"
           echo "${{ secrets.ACR_PASSWORD }}" | docker login "$ACR_HOST" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
@@ -156,16 +157,33 @@ jobs:
               echo "  caddy_config:"
             } > "$PROJECT_DIR/deploy/docker-compose.prod.yml"
 
+            if [ ! -d "$PROJECT_DIR/.git" ]; then
+              rm -rf "$PROJECT_DIR" || true
+              mkdir -p "$PROJECT_DIR"
+              git clone "$GIT_REPO_URL" "$PROJECT_DIR"
+            else
+              git -C "$PROJECT_DIR" fetch --all || true
+              git -C "$PROJECT_DIR" reset --hard origin/main || true
+            fi
+
             cd "$PROJECT_DIR"
+            set +e
             docker compose -f deploy/docker-compose.prod.yml pull
+            PULL_RC=$?
+            set -e
             docker compose -f deploy/docker-compose.prod.yml down || true
             docker volume rm mysql_data 2>/dev/null || true
+            if [ "$PULL_RC" -ne 0 ]; then
+              echo "ACR pull failed, building images locally as fallback..."
+              docker build -t "$BACKEND_IMAGE" ./backend
+              docker build -t "$WEB_IMAGE" ./web
+            fi
             docker compose -f deploy/docker-compose.prod.yml up -d
             sleep 40
             echo "Compose services are up. Verifying endpoints..."
             # simple verify from ECS
-            curl -I --max-time 10 "https://${DOMAIN_API_HOST}/swagger-ui.html" || true
-            curl -I --max-time 10 "https://${DOMAIN_APP_HOST}/" || true
+            curl -I --max-time 10 "http://${DOMAIN_API_HOST}/swagger-ui.html" || true
+            curl -I --max-time 10 "http://${DOMAIN_APP_HOST}/" || true
             echo "Listing containers and ports..."
             docker compose -f deploy/docker-compose.prod.yml ps
             docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
