@@ -101,11 +101,12 @@ jobs:
               echo ""
               echo "${APP_HOSTS} {"
               echo "  encode gzip"
-              echo "  route /api* {"
+              echo "  handle_path /api* {"
               echo "    uri strip_prefix /api"
               echo "    reverse_proxy http://backend:8080"
               echo "  }"
-              echo "  reverse_proxy http://web:80"
+              echo "  root * /srv/site"
+              echo "  file_server"
               echo "}"
             } > "$PROJECT_DIR/deploy/caddy/Caddyfile"
 
@@ -148,6 +149,7 @@ jobs:
               echo "    container_name: smartmix-caddy"
               echo "    volumes:"
               echo "      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile"
+              echo "      - ./deploy/site:/srv/site:ro"
               echo "      - caddy_data:/data"
               echo "      - caddy_config:/config"
               echo "    ports:"
@@ -155,8 +157,6 @@ jobs:
               echo "      - \"443:443\""
               echo "    depends_on:"
               echo "      backend:"
-              echo "        condition: service_started"
-              echo "      web:"
               echo "        condition: service_started"
               echo "    restart: unless-stopped"
               echo "volumes:"
@@ -180,6 +180,11 @@ jobs:
             echo "Building images locally..."
             docker build --pull -t "$BACKEND_IMAGE" ./backend
             docker build --pull -t "$WEB_IMAGE" ./web
+            echo "Extracting web static assets from image..."
+            mkdir -p "$PROJECT_DIR/deploy/site"
+            WEB_TMP=$(docker create "$WEB_IMAGE")
+            docker cp "$WEB_TMP":/usr/share/nginx/html/. "$PROJECT_DIR/deploy/site/"
+            docker rm "$WEB_TMP"
             docker compose -f deploy/docker-compose.prod.yml up -d
             echo "Waiting for services to stabilize..."
             sleep 20
@@ -221,11 +226,12 @@ jobs:
               echo ""
               echo "${APP_HOSTS} {"
               echo "  encode gzip"
-              echo "  route /api* {"
+              echo "  handle_path /api* {"
               echo "    uri strip_prefix /api"
               echo "    reverse_proxy http://${BACKEND_IP}:8080"
               echo "  }"
-              echo "  reverse_proxy http://${WEB_IP}:80"
+              echo "  root * /srv/site"
+              echo "  file_server"
               echo "}"
             } > "$PROJECT_DIR/deploy/caddy/Caddyfile"
             docker compose -f deploy/docker-compose.prod.yml restart caddy || true
