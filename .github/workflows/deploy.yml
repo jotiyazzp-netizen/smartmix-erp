@@ -94,6 +94,9 @@ jobs:
             } > "$PROJECT_DIR/deploy/.env.production"
 
             {
+              echo "{"
+              echo "  auto_https off"
+              echo "}"
               echo "${DOMAIN_API_HOST} {"
               echo "  encode gzip"
               echo "  reverse_proxy http://backend:8080"
@@ -219,6 +222,9 @@ jobs:
             if [ "$BE_READY" != "1" ]; then echo "Backend not ready, last 100 lines:"; docker compose -f deploy/docker-compose.prod.yml logs backend --tail=100 || true; fi
             echo "Rewriting Caddyfile with upstream IPs and reloading..."
             {
+              echo "{"
+              echo "  auto_https off"
+              echo "}"
               echo "${DOMAIN_API_HOST} {"
               echo "  encode gzip"
               echo "  reverse_proxy http://${BACKEND_IP}:8080"
