@@ -72,6 +72,10 @@ jobs:
           ufw status || true
           ufw allow 80/tcp || true
           ufw allow 443/tcp || true
+          docker ps -a --format '{{.ID}} {{.Names}} {{.Image}} {{.Ports}}'
+          docker stop $(docker ps -q --filter name=nginx) 2>/dev/null || true
+          docker stop $(docker ps -q --filter name=caddy) 2>/dev/null || true
+          docker rm $(docker ps -aq --filter name=caddy) 2>/dev/null || true
 
             {
               echo "SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai"
