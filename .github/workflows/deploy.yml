@@ -5,44 +5,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_and_push:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set image tags
-        env:
-          ACR_HOST: crpi-vvd63gd4gtn8gczl.cn-hangzhou.personal.cr.aliyuncs.com
-          ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
-        run: |
-          echo "ACR_HOST=$ACR_HOST" >> $GITHUB_ENV
-          echo "ACR_NAMESPACE=$ACR_NAMESPACE" >> $GITHUB_ENV
-          echo "BACKEND_IMAGE=$ACR_HOST/$ACR_NAMESPACE/smartmix-backend:latest" >> $GITHUB_ENV
-          echo "WEB_IMAGE=$ACR_HOST/$ACR_NAMESPACE/smartmix-web:latest" >> $GITHUB_ENV
-
-      - name: Login ACR (instance domain via shell)
-        env:
-          ACR_HOST: crpi-vvd63gd4gtn8gczl.cn-hangzhou.personal.cr.aliyuncs.com
-        run: |
-          echo "Login ACR: $ACR_HOST"
-          echo "${{ secrets.ACR_PASSWORD }}" | docker login "$ACR_HOST" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
-
-      - name: Build and push backend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ env.BACKEND_IMAGE }}
-
-      - name: Build and push web
-        uses: docker/build-push-action@v5
-        with:
-          context: ./web
-          push: true
-          tags: ${{ env.WEB_IMAGE }}
-
   deploy_ecs:
-    needs: build_and_push
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
@@ -53,8 +16,6 @@ jobs:
           key: ${{ secrets.ECS_SSH_KEY }}
           script: |
             set -e
-            ACR_HOST="crpi-vvd63gd4gtn8gczl.cn-hangzhou.personal.cr.aliyuncs.com"
-            ACR_NAMESPACE="${{ secrets.ACR_NAMESPACE }}"
             PROJECT_DIR="${{ secrets.PROJECT_DIR }}"
             DOMAIN_API_RAW="${{ secrets.DOMAIN_API }}"
             DOMAIN_APP_RAW="${{ secrets.DOMAIN_APP }}"
@@ -62,25 +23,23 @@ jobs:
             DOMAIN_API_HOST="$(echo "$DOMAIN_API_RAW" | sed -E 's#^https?://##; s#/*$##')"
             DOMAIN_APP_HOST="$(echo "$DOMAIN_APP_RAW" | sed -E 's#^https?://##; s#/*$##')"
             DOMAIN_ROOT_HOST="$(echo "$DOMAIN_ROOT_RAW" | sed -E 's#^https?://##; s#/*$##')"
-            APP_HOSTS="$DOMAIN_APP_HOST"
-            if [ -n "$DOMAIN_ROOT_HOST" ]; then APP_HOSTS="$DOMAIN_ROOT_HOST, $DOMAIN_APP_HOST"; fi
             MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
             GIT_REPO_URL="https://github.com/jotiyazzp-netizen/smartmix-erp.git"
 
-            BACKEND_IMAGE="$ACR_HOST/$ACR_NAMESPACE/smartmix-backend:latest"
-            WEB_IMAGE="$ACR_HOST/$ACR_NAMESPACE/smartmix-web:latest"
-
-            mkdir -p "$PROJECT_DIR/deploy" "$PROJECT_DIR/deploy/caddy" "$PROJECT_DIR/deploy/nginx"
-
-            echo "Login ACR on ECS: $ACR_HOST"
-            echo "${{ secrets.ACR_PASSWORD }}" | docker login "$ACR_HOST" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
             ufw status || true
             ufw allow 80/tcp || true
             ufw allow 443/tcp || true
-            docker ps -a --format '{{.ID}} {{.Names}} {{.Image}} {{.Ports}}'
-            docker stop $(docker ps -q --filter name=nginx) 2>/dev/null || true
-            docker stop $(docker ps -q --filter name=caddy) 2>/dev/null || true
-            docker rm $(docker ps -aq --filter name=caddy) 2>/dev/null || true
+            docker stop $(docker ps -q --filter name=smartmix-nginx) 2>/dev/null || true
+            docker stop $(docker ps -q --filter name=smartmix-backend) 2>/dev/null || true
+
+            if [ ! -d "$PROJECT_DIR/.git" ]; then
+              rm -rf "$PROJECT_DIR" || true
+              mkdir -p "$PROJECT_DIR"
+              git clone "$GIT_REPO_URL" "$PROJECT_DIR"
+            else
+              git -C "$PROJECT_DIR" fetch --all || true
+              git -C "$PROJECT_DIR" reset --hard origin/main || true
+            fi
 
             {
               echo "SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai"
@@ -93,179 +52,15 @@ jobs:
               echo "ERP_WEBHOOK_TOKEN=${{ secrets.ERP_WEBHOOK_TOKEN }}"
             } > "$PROJECT_DIR/deploy/.env.production"
 
-            {
-              echo "events {}"
-              echo "http {"
-              echo "  sendfile on;"
-              echo "  gzip on;"
-              echo "  server {"
-              echo "    listen 80;"
-              echo "    server_name ${DOMAIN_API_HOST};"
-              echo "    location / { proxy_pass http://backend:8080; }"
-              echo "  }"
-              echo "  server {"
-              echo "    listen 80;"
-              echo "    server_name ${APP_HOSTS};"
-              echo "    root /srv/site;"
-              echo "    index index.html;"
-              echo "    location /api/ {"
-              echo "      rewrite ^/api/(.*)$ /$1 break;"
-              echo "      proxy_pass http://backend:8080;"
-              echo "    }"
-              echo "    location / { try_files $uri $uri/ /index.html; }"
-              echo "  }"
-              echo "}"
-            } > "$PROJECT_DIR/deploy/nginx/nginx.conf"
-
-            {
-              echo "services:"
-              echo "  backend:"
-              echo "    image: ${BACKEND_IMAGE}"
-              echo "    env_file: deploy/.env.production"
-              echo "    restart: unless-stopped"
-              echo "    ports:"
-              echo "      - \"8080:8080\""
-              echo "    depends_on:"
-              echo "      mysql:"
-              echo "        condition: service_healthy"
-              echo "  web:"
-              echo "    image: ${WEB_IMAGE}"
-              echo "    restart: unless-stopped"
-              echo "    ports:"
-              echo "      - \"8081:80\""
-              echo "  mysql:"
-              echo "    image: mysql:8.0"
-              echo "    environment:"
-              echo "      - MYSQL_DATABASE=smartmix"
-              echo "      - MYSQL_USER=${{ secrets.MYSQL_USER }}"
-              echo "      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD}"
-              echo "      - MYSQL_PASSWORD=${MYSQL_PASSWORD}"
-              echo "    volumes:"
-              echo "      - mysql_data:/var/lib/mysql"
-              echo "    healthcheck:"
-              echo "      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']"
-              echo "      interval: 10s"
-              echo "      timeout: 5s"
-              echo "      retries: 30"
-              echo "    restart: unless-stopped"
-              echo "  redis:"
-              echo "    image: redis:7-alpine"
-              echo "    restart: unless-stopped"
-              echo "  nginx:"
-              echo "    image: nginx:alpine"
-              echo "    container_name: smartmix-nginx"
-              echo "    volumes:"
-              echo "      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro"
-              echo "      - ./deploy/site:/srv/site:ro"
-              echo "    ports:"
-              echo "      - \"80:80\""
-              echo "    depends_on:"
-              echo "      backend:"
-              echo "        condition: service_started"
-              echo "    restart: unless-stopped"
-              echo "volumes:"
-              echo "  mysql_data:"
-              echo "  caddy_data:"
-              echo "  caddy_config:"
-            } > "$PROJECT_DIR/deploy/docker-compose.prod.yml"
-
-            if [ ! -d "$PROJECT_DIR/.git" ]; then
-              rm -rf "$PROJECT_DIR" || true
-              mkdir -p "$PROJECT_DIR"
-              git clone "$GIT_REPO_URL" "$PROJECT_DIR"
-            else
-              git -C "$PROJECT_DIR" fetch --all || true
-              git -C "$PROJECT_DIR" reset --hard origin/main || true
-            fi
-
-            cd "$PROJECT_DIR"
-            docker compose -f deploy/docker-compose.prod.yml down || true
+            cd "$PROJECT_DIR/deploy"
+            docker compose -f docker-compose.prod.yml down || true
             docker volume rm mysql_data 2>/dev/null || true
-            echo "Building images locally..."
-            docker build --pull -t "$BACKEND_IMAGE" ./backend
-            docker build --pull -t "$WEB_IMAGE" ./web
-            echo "Extracting web static assets from image..."
-            mkdir -p "$PROJECT_DIR/deploy/site"
-            WEB_TMP=$(docker create "$WEB_IMAGE")
-            docker cp "$WEB_TMP":/usr/share/nginx/html/. "$PROJECT_DIR/deploy/site/"
-            docker rm "$WEB_TMP"
-            if [ ! -f "$PROJECT_DIR/deploy/site/index.html" ]; then
-              echo "Creating minimal index.html fallback..."
-              {
-                echo "<!doctype html>"
-                echo "<html>"
-                echo "<head>"
-                echo "  <meta charset=\"utf-8\"/>"
-                echo "  <title>SmartMix Online</title>"
-                echo "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>"
-                echo "  <style>body{font-family:system-ui,Segoe UI,Arial;margin:40px}code{background:#f3f3f3;padding:2px 6px;border-radius:4px}</style>"
-                echo "  </head>"
-                echo "<body>"
-                echo "  <h1>SmartMix 已上线</h1>"
-                echo "  <p>如果页面未加载，请稍后刷新。接口地址：<code>/api</code></p>"
-                echo "  <p><a href=\"/api/swagger-ui.html\">打开 Swagger</a></p>"
-                echo "</body>"
-                echo "</html>"
-              } > "$PROJECT_DIR/deploy/site/index.html"
-            fi
-            docker compose -f deploy/docker-compose.prod.yml up -d
-            echo "Waiting for services to stabilize..."
+            docker compose -f docker-compose.prod.yml up -d --build
+
             sleep 20
-            echo "Compose services are up. Verifying endpoints..."
-            # simple verify from ECS
-            curl -I --max-time 10 "http://${DOMAIN_API_HOST}/swagger-ui.html" || true
-            curl -I --max-time 10 "http://${DOMAIN_APP_HOST}/" || true
-            echo "Listing containers and ports..."
-            docker compose -f deploy/docker-compose.prod.yml ps
-            docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-            echo "Nginx logs (tail 200):"
-            docker compose -f deploy/docker-compose.prod.yml logs nginx --tail=200 || true
-            echo "Backend logs (tail 200):"
-            docker compose -f deploy/docker-compose.prod.yml logs backend --tail=200 || true
-            echo "Web logs (tail 200):"
-            docker compose -f deploy/docker-compose.prod.yml logs web --tail=200 || true
-            echo "Probing upstream containers by IP..."
-            BACKEND_CID=$(docker compose -f deploy/docker-compose.prod.yml ps -q backend)
-            WEB_CID=$(docker compose -f deploy/docker-compose.prod.yml ps -q web)
-            BACKEND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$BACKEND_CID")
-            WEB_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$WEB_CID")
-            echo "backend ip=$BACKEND_IP web ip=$WEB_IP"
-            echo "Probing upstream readiness with retries..."
-            for i in $(seq 1 30); do
-              curl -s -o /dev/null -I --max-time 6 "http://${WEB_IP}/" && WEB_READY=1 || WEB_READY=0
-              curl -s -o /dev/null -I --max-time 6 "http://${BACKEND_IP}:8080/swagger-ui.html" && BE_READY=1 || BE_READY=0
-              echo "Attempt ${i}: web=${WEB_READY} backend=${BE_READY}"
-              if [ "$WEB_READY" = "1" ] && [ "$BE_READY" = "1" ]; then break; fi
-              sleep 4
-            done
-            if [ "$WEB_READY" != "1" ]; then echo "Web not ready, last 100 lines:"; docker compose -f deploy/docker-compose.prod.yml logs web --tail=100 || true; fi
-            if [ "$BE_READY" != "1" ]; then echo "Backend not ready, last 100 lines:"; docker compose -f deploy/docker-compose.prod.yml logs backend --tail=100 || true; fi
-            echo "Rewriting Nginx conf with current upstream IP and reloading..."
-            {
-              echo "events {}"
-              echo "http {"
-              echo "  sendfile on;"
-              echo "  gzip on;"
-              echo "  server {"
-              echo "    listen 80;"
-              echo "    server_name ${DOMAIN_API_HOST};"
-              echo "    location / { proxy_pass http://${BACKEND_IP}:8080; }"
-              echo "  }"
-              echo "  server {"
-              echo "    listen 80;"
-              echo "    server_name ${APP_HOSTS};"
-              echo "    root /srv/site;"
-              echo "    index index.html;"
-              echo "    location /api/ {"
-              echo "      rewrite ^/api/(.*)$ /$1 break;"
-              echo "      proxy_pass http://${BACKEND_IP}:8080;"
-              echo "    }"
-              echo "    location / { try_files $uri $uri/ /index.html; }"
-              echo "  }"
-              echo "}"
-            } > "$PROJECT_DIR/deploy/nginx/nginx.conf"
-            docker compose -f deploy/docker-compose.prod.yml restart nginx || true
-            sleep 10
             curl -I --max-time 10 "http://${DOMAIN_API_HOST}/swagger-ui.html" || true
             curl -I --max-time 10 "http://${DOMAIN_APP_HOST}/" || true
             if [ -n "$DOMAIN_ROOT_HOST" ]; then curl -I --max-time 10 "http://${DOMAIN_ROOT_HOST}/" || true; fi
+            docker compose -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.prod.yml logs nginx --tail=100 || true
+            docker compose -f docker-compose.prod.yml logs backend --tail=100 || true
