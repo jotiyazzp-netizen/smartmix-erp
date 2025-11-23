@@ -8,6 +8,18 @@ jobs:
   deploy_ecs:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload project to server
+        uses: appleboy/scp-action@v0.1.6
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USER }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          source: "deploy/**,backend/**,web/**"
+          target: ${{ secrets.PROJECT_DIR }}
+          overwrite: true
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -31,15 +43,7 @@ jobs:
             ufw allow 443/tcp || true
             docker stop $(docker ps -q --filter name=smartmix-nginx) 2>/dev/null || true
             docker stop $(docker ps -q --filter name=smartmix-backend) 2>/dev/null || true
-
-            if [ ! -d "$PROJECT_DIR/.git" ]; then
-              rm -rf "$PROJECT_DIR" || true
-              mkdir -p "$PROJECT_DIR"
-              git clone "$GIT_REPO_URL" "$PROJECT_DIR"
-            else
-              git -C "$PROJECT_DIR" fetch --all || true
-              git -C "$PROJECT_DIR" reset --hard origin/main || true
-            fi
+            mkdir -p "$PROJECT_DIR"
 
             {
               echo "SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai"
