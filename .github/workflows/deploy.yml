@@ -191,22 +191,22 @@ jobs:
             docker rm "$WEB_TMP"
             if [ ! -f "$PROJECT_DIR/deploy/site/index.html" ]; then
               echo "Creating minimal index.html fallback..."
-              cat > "$PROJECT_DIR/deploy/site/index.html" <<'EOF'
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>SmartMix Online</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <style>body{font-family:system-ui,Segoe UI,Arial;margin:40px}code{background:#f3f3f3;padding:2px 6px;border-radius:4px}</style>
-  </head>
-<body>
-  <h1>SmartMix 已上线</h1>
-  <p>如果页面未加载，请稍后刷新。接口地址：<code>/api</code></p>
-  <p><a href="/api/swagger-ui.html">打开 Swagger</a></p>
-</body>
-</html>
-EOF
+              {
+                echo "<!doctype html>"
+                echo "<html>"
+                echo "<head>"
+                echo "  <meta charset=\"utf-8\"/>"
+                echo "  <title>SmartMix Online</title>"
+                echo "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>"
+                echo "  <style>body{font-family:system-ui,Segoe UI,Arial;margin:40px}code{background:#f3f3f3;padding:2px 6px;border-radius:4px}</style>"
+                echo "  </head>"
+                echo "<body>"
+                echo "  <h1>SmartMix 已上线</h1>"
+                echo "  <p>如果页面未加载，请稍后刷新。接口地址：<code>/api</code></p>"
+                echo "  <p><a href=\"/api/swagger-ui.html\">打开 Swagger</a></p>"
+                echo "</body>"
+                echo "</html>"
+              } > "$PROJECT_DIR/deploy/site/index.html"
             fi
             docker compose -f deploy/docker-compose.prod.yml up -d
             echo "Waiting for services to stabilize..."
