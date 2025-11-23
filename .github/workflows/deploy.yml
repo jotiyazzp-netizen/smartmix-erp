@@ -191,3 +191,13 @@ jobs:
             docker compose -f deploy/docker-compose.prod.yml logs caddy --tail=200 || true
             echo "Backend logs (tail 200):"
             docker compose -f deploy/docker-compose.prod.yml logs backend --tail=200 || true
+            echo "Probing upstream containers by IP..."
+            BACKEND_CID=$(docker compose -f deploy/docker-compose.prod.yml ps -q backend)
+            WEB_CID=$(docker compose -f deploy/docker-compose.prod.yml ps -q web)
+            BACKEND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$BACKEND_CID")
+            WEB_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$WEB_CID")
+            echo "backend ip=$BACKEND_IP web ip=$WEB_IP"
+            curl -I --max-time 10 "http://${BACKEND_IP}:8080/swagger-ui.html" || true
+            curl -I --max-time 10 "http://${WEB_IP}/" || true
+            echo "Restarting caddy to reload routes..."
+            docker compose -f deploy/docker-compose.prod.yml restart caddy || true
