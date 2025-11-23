@@ -168,19 +168,14 @@ jobs:
             fi
 
             cd "$PROJECT_DIR"
-            set +e
-            docker compose -f deploy/docker-compose.prod.yml pull
-            PULL_RC=$?
-            set -e
             docker compose -f deploy/docker-compose.prod.yml down || true
             docker volume rm mysql_data 2>/dev/null || true
-            if [ "$PULL_RC" -ne 0 ]; then
-              echo "ACR pull failed, building images locally as fallback..."
-              docker build -t "$BACKEND_IMAGE" ./backend
-              docker build -t "$WEB_IMAGE" ./web
-            fi
+            echo "Building images locally..."
+            docker build --pull -t "$BACKEND_IMAGE" ./backend
+            docker build --pull -t "$WEB_IMAGE" ./web
             docker compose -f deploy/docker-compose.prod.yml up -d
-            sleep 40
+            echo "Waiting for services to stabilize..."
+            sleep 60
             echo "Compose services are up. Verifying endpoints..."
             # simple verify from ECS
             curl -I --max-time 10 "http://${DOMAIN_API_HOST}/swagger-ui.html" || true
