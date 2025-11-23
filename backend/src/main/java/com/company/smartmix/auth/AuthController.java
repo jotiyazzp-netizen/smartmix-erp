@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -27,6 +28,8 @@ public class AuthController {
     private final JwtTokenProvider tokenProvider;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    @Value("${app.erp.webhook-token}")
+    private String webhookToken;
 
     @Operation(summary = "用户登录")
     @PostMapping("/login")
@@ -70,6 +73,26 @@ public class AuthController {
         userRepository.save(user);
 
         return ApiResponse.success("注册成功");
+    }
+
+    @Operation(summary = "重置默认管理员密码为 admin123（受令牌保护）")
+    @PostMapping("/reset-admin")
+    public ApiResponse<String> resetAdmin(@RequestHeader("X-ERP-TOKEN") String token) {
+        if (token == null || !token.equals(webhookToken)) {
+            return ApiResponse.forbidden("无效令牌");
+        }
+        User admin = userRepository.findByUsername("admin").orElseGet(() -> {
+            User u = new User();
+            u.setUsername("admin");
+            u.setRealName("系统管理员");
+            u.setEmail("admin@smartmix.com");
+            u.setRole("ADMIN");
+            u.setEnabled(true);
+            return u;
+        });
+        admin.setPassword(passwordEncoder.encode("admin123"));
+        userRepository.save(admin);
+        return ApiResponse.success("管理员密码已重置为 admin123");
     }
 
     @Operation(summary = "获取当前用户信息")
