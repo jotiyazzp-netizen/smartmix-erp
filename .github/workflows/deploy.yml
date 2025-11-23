@@ -84,7 +84,7 @@ jobs:
               echo "SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}"
               echo "SPRING_REDIS_HOST=redis"
               echo "SPRING_REDIS_PORT=6379"
-              echo "SPRING_PROFILES_ACTIVE=prod"
+              echo "SPRING_PROFILES_ACTIVE=local"
               echo "APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}"
               echo "ERP_WEBHOOK_TOKEN=${{ secrets.ERP_WEBHOOK_TOKEN }}"
             } > "$PROJECT_DIR/deploy/.env.production"
