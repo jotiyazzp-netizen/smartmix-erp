@@ -20,13 +20,13 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.ACR_REGISTRY }}/smartmix-backend:latest
+          tags: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/smartmix-backend:latest
       - name: Build and push web
         uses: docker/build-push-action@v5
         with:
           context: ./web
           push: true
-          tags: ${{ secrets.ACR_REGISTRY }}/smartmix-web:latest
+          tags: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/smartmix-web:latest
 
   deploy_ecs:
     needs: build_and_push
@@ -41,10 +41,14 @@ jobs:
           script: |
             set -e
             ACR_REGISTRY="${{ secrets.ACR_REGISTRY }}"
+            ACR_NAMESPACE="${{ secrets.ACR_NAMESPACE }}"
             PROJECT_DIR="${{ secrets.PROJECT_DIR }}"
             DOMAIN_API="${{ secrets.DOMAIN_API }}"
             DOMAIN_APP="${{ secrets.DOMAIN_APP }}"
             MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
+
+            BACKEND_IMAGE="${ACR_REGISTRY}/${ACR_NAMESPACE}/smartmix-backend:latest"
+            WEB_IMAGE="${ACR_REGISTRY}/${ACR_NAMESPACE}/smartmix-web:latest"
 
             mkdir -p "$PROJECT_DIR/deploy" "$PROJECT_DIR/deploy/caddy"
 
@@ -77,11 +81,11 @@ jobs:
             {
               echo "services:"
               echo "  backend:"
-              echo "    image: ${ACR_REGISTRY}/smartmix-backend:latest"
+              echo "    image: ${BACKEND_IMAGE}"
               echo "    env_file: deploy/.env.production"
               echo "    restart: unless-stopped"
               echo "  web:"
-              echo "    image: ${ACR_REGISTRY}/smartmix-web:latest"
+              echo "    image: ${WEB_IMAGE}"
               echo "    restart: unless-stopped"
               echo "  mysql:"
               echo "    image: mysql:8.0"
