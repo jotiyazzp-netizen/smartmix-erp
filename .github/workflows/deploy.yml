@@ -56,8 +56,10 @@ jobs:
             ACR_HOST="crpi-vvd63gd4gtn8gczl.cn-hangzhou.personal.cr.aliyuncs.com"
             ACR_NAMESPACE="${{ secrets.ACR_NAMESPACE }}"
           PROJECT_DIR="${{ secrets.PROJECT_DIR }}"
-          DOMAIN_API="${{ secrets.DOMAIN_API }}"
-          DOMAIN_APP="${{ secrets.DOMAIN_APP }}"
+          DOMAIN_API_RAW="${{ secrets.DOMAIN_API }}"
+          DOMAIN_APP_RAW="${{ secrets.DOMAIN_APP }}"
+          DOMAIN_API_HOST="$(echo "$DOMAIN_API_RAW" | sed -E 's#^https?://##; s#/*$##')"
+          DOMAIN_APP_HOST="$(echo "$DOMAIN_APP_RAW" | sed -E 's#^https?://##; s#/*$##')"
           MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
 
           BACKEND_IMAGE="$ACR_HOST/$ACR_NAMESPACE/smartmix-backend:latest"
@@ -79,17 +81,17 @@ jobs:
             } > "$PROJECT_DIR/deploy/.env.production"
 
             {
-              echo "${DOMAIN_API} {"
+              echo "${DOMAIN_API_HOST} {"
+              echo "  encode gzip"
+              echo "  reverse_proxy backend:8080"
+              echo "}"
+              echo ""
+              echo "${DOMAIN_APP_HOST} {"
               echo "  encode gzip"
               echo "  route /api* {"
               echo "    uri strip_prefix /api"
               echo "    reverse_proxy backend:8080"
               echo "  }"
-              echo "  reverse_proxy web:80"
-              echo "}"
-              echo ""
-              echo "${DOMAIN_APP} {"
-              echo "  encode gzip"
               echo "  reverse_proxy web:80"
               echo "}"
             } > "$PROJECT_DIR/deploy/caddy/Caddyfile"
@@ -138,5 +140,5 @@ jobs:
             docker compose -f deploy/docker-compose.prod.yml up -d
             echo "Compose services are up. Verifying endpoints..."
             # simple verify from ECS
-            curl -I --max-time 10 "https://${DOMAIN_API#*@}/swagger-ui.html" || true
-            curl -I --max-time 10 "https://${DOMAIN_APP#*@}/" || true
+            curl -I --max-time 10 "https://${DOMAIN_API_HOST}/swagger-ui.html" || true
+            curl -I --max-time 10 "https://${DOMAIN_APP_HOST}/" || true
