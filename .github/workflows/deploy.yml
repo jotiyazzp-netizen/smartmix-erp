@@ -110,11 +110,6 @@ jobs:
               echo "  backend:"
               echo "    image: ${BACKEND_IMAGE}"
               echo "    env_file: deploy/.env.production"
-              echo "    healthcheck:"
-              echo "      test: ['CMD', 'curl', '-f', 'http://localhost:8080/swagger-ui.html']"
-              echo "      interval: 15s"
-              echo "      timeout: 5s"
-              echo "      retries: 20"
               echo "    restart: unless-stopped"
               echo "  web:"
               echo "    image: ${WEB_IMAGE}"
@@ -149,7 +144,7 @@ jobs:
               echo "      - \"443:443\""
               echo "    depends_on:"
               echo "      backend:"
-              echo "        condition: service_healthy"
+              echo "        condition: service_started"
               echo "      web:"
               echo "        condition: service_started"
               echo "    restart: unless-stopped"
@@ -193,6 +188,8 @@ jobs:
             docker compose -f deploy/docker-compose.prod.yml logs caddy --tail=200 || true
             echo "Backend logs (tail 200):"
             docker compose -f deploy/docker-compose.prod.yml logs backend --tail=200 || true
+            echo "Web logs (tail 200):"
+            docker compose -f deploy/docker-compose.prod.yml logs web --tail=200 || true
             echo "Probing upstream containers by IP..."
             BACKEND_CID=$(docker compose -f deploy/docker-compose.prod.yml ps -q backend)
             WEB_CID=$(docker compose -f deploy/docker-compose.prod.yml ps -q web)
