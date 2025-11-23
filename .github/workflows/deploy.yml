@@ -73,7 +73,7 @@ jobs:
             docker volume rm mysql_data 2>/dev/null || true
             docker compose -f docker-compose.prod.yml up -d --build
 
-            sleep 20
+            sleep 60
             ERP_TOKEN="${{ secrets.ERP_WEBHOOK_TOKEN }}"
             if [ -n "$ERP_TOKEN" ]; then
               curl -s -X POST -H "X-ERP-TOKEN: $ERP_TOKEN" "http://${DOMAIN_API_HOST}/api/auth/reset-admin" || true
@@ -82,5 +82,5 @@ jobs:
             curl -I --max-time 10 "http://${DOMAIN_APP_HOST}/" || true
             if [ -n "$DOMAIN_ROOT_HOST" ]; then curl -I --max-time 10 "http://${DOMAIN_ROOT_HOST}/" || true; fi
             docker compose -f docker-compose.prod.yml ps
-            docker compose -f docker-compose.prod.yml logs nginx --tail=100 || true
-            docker compose -f docker-compose.prod.yml logs backend --tail=100 || true
+            docker compose -f docker-compose.prod.yml logs nginx --tail=200 || true
+            docker compose -f docker-compose.prod.yml logs backend --tail=300 || true
