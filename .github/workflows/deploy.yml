@@ -198,5 +198,23 @@ jobs:
             echo "backend ip=$BACKEND_IP web ip=$WEB_IP"
             curl -I --max-time 10 "http://${BACKEND_IP}:8080/swagger-ui.html" || true
             curl -I --max-time 10 "http://${WEB_IP}/" || true
-            echo "Restarting caddy to reload routes..."
+            echo "Rewriting Caddyfile with upstream IPs and reloading..."
+            {
+              echo "${DOMAIN_API_HOST} {"
+              echo "  encode gzip"
+              echo "  reverse_proxy http://${BACKEND_IP}:8080"
+              echo "}"
+              echo ""
+              echo "${DOMAIN_APP_HOST} {"
+              echo "  encode gzip"
+              echo "  route /api* {"
+              echo "    uri strip_prefix /api"
+              echo "    reverse_proxy http://${BACKEND_IP}:8080"
+              echo "  }"
+              echo "  reverse_proxy http://${WEB_IP}:80"
+              echo "}"
+            } > "$PROJECT_DIR/deploy/caddy/Caddyfile"
             docker compose -f deploy/docker-compose.prod.yml restart caddy || true
+            sleep 10
+            curl -I --max-time 10 "http://${DOMAIN_API_HOST}/swagger-ui.html" || true
+            curl -I --max-time 10 "http://${DOMAIN_APP_HOST}/" || true
