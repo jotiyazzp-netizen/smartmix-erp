@@ -1,47 +1,37 @@
 name: deploy
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
+
 jobs:
-  build-and-push:
+  build_and_push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
       - name: Login ACR
         uses: docker/login-action@v3
         with:
           registry: ${{ secrets.ACR_REGISTRY }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
-      - name: Build backend image
+      - name: Build and push backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: ${{ secrets.ACR_REGISTRY }}/smartmix-backend:latest
-      - name: Build web image
+      - name: Build and push web
         uses: docker/build-push-action@v5
         with:
           context: ./web
           push: true
           tags: ${{ secrets.ACR_REGISTRY }}/smartmix-web:latest
-  deploy-ecs:
-    needs: build-and-push
+
+  deploy_ecs:
+    needs: build_and_push
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -50,77 +40,79 @@ jobs:
           key: ${{ secrets.ECS_SSH_KEY }}
           script: |
             set -e
-            mkdir -p ${{ secrets.PROJECT_DIR }}/deploy
-            if [ ! -f ${{ secrets.PROJECT_DIR }}/deploy/.env.production ]; then
-              echo "SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai" > ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "SPRING_DATASOURCE_USERNAME=${{ secrets.MYSQL_USER }}" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "SPRING_DATASOURCE_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "SPRING_REDIS_HOST=redis" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "SPRING_REDIS_PORT=6379" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "ERP_WEBHOOK_TOKEN=${{ secrets.ERP_WEBHOOK_TOKEN }}" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-            fi
-            if [ ! -d ${{ secrets.PROJECT_DIR }}/deploy/caddy ]; then
-              mkdir -p ${{ secrets.PROJECT_DIR }}/deploy/caddy
-            fi
-            if [ ! -f ${{ secrets.PROJECT_DIR }}/deploy/caddy/Caddyfile ]; then
-              cat > ${{ secrets.PROJECT_DIR }}/deploy/caddy/Caddyfile <<CADDY
-${{ secrets.DOMAIN_API }} {
-  encode gzip
-  route /api* {
-    uri strip_prefix /api
-    reverse_proxy backend:8080
-  }
-  reverse_proxy web:80
-}
+            ACR_REGISTRY="${{ secrets.ACR_REGISTRY }}"
+            PROJECT_DIR="${{ secrets.PROJECT_DIR }}"
+            DOMAIN_API="${{ secrets.DOMAIN_API }}"
+            DOMAIN_APP="${{ secrets.DOMAIN_APP }}"
+            MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
 
-${{ secrets.DOMAIN_APP }} {
-  encode gzip
-  reverse_proxy web:80
-}
-CADDY
-            fi
-            if [ ! -f ${{ secrets.PROJECT_DIR }}/deploy/docker-compose.prod.yml ]; then
-              cat > ${{ secrets.PROJECT_DIR }}/deploy/docker-compose.prod.yml <<COMPOSE
-services:
-  backend:
-    image: ${ACR_REGISTRY}/smartmix-backend:latest
-    env_file: deploy/.env.production
-    restart: unless-stopped
-  web:
-    image: ${ACR_REGISTRY}/smartmix-web:latest
-    restart: unless-stopped
-  mysql:
-    image: mysql:8.0
-    environment:
-      - MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
-    volumes:
-      - mysql_data:/var/lib/mysql
-    restart: unless-stopped
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-  caddy:
-    image: caddy:2
-    container_name: smartmix-caddy
-    volumes:
-      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      - backend
-      - web
-    restart: unless-stopped
-volumes:
-  mysql_data:
-  caddy_data:
-  caddy_config:
-COMPOSE
-            fi
-            export ACR_REGISTRY=${{ secrets.ACR_REGISTRY }}
-            cd ${{ secrets.PROJECT_DIR }}
+            mkdir -p "$PROJECT_DIR/deploy" "$PROJECT_DIR/deploy/caddy"
+
+            {
+              echo "SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai"
+              echo "SPRING_DATASOURCE_USERNAME=${{ secrets.MYSQL_USER }}"
+              echo "SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}"
+              echo "SPRING_REDIS_HOST=redis"
+              echo "SPRING_REDIS_PORT=6379"
+              echo "APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}"
+              echo "ERP_WEBHOOK_TOKEN=${{ secrets.ERP_WEBHOOK_TOKEN }}"
+            } > "$PROJECT_DIR/deploy/.env.production"
+
+            {
+              echo "${DOMAIN_API} {"
+              echo "  encode gzip"
+              echo "  route /api* {"
+              echo "    uri strip_prefix /api"
+              echo "    reverse_proxy backend:8080"
+              echo "  }"
+              echo "  reverse_proxy web:80"
+              echo "}"
+              echo ""
+              echo "${DOMAIN_APP} {"
+              echo "  encode gzip"
+              echo "  reverse_proxy web:80"
+              echo "}"
+            } > "$PROJECT_DIR/deploy/caddy/Caddyfile"
+
+            {
+              echo "services:"
+              echo "  backend:"
+              echo "    image: ${ACR_REGISTRY}/smartmix-backend:latest"
+              echo "    env_file: deploy/.env.production"
+              echo "    restart: unless-stopped"
+              echo "  web:"
+              echo "    image: ${ACR_REGISTRY}/smartmix-web:latest"
+              echo "    restart: unless-stopped"
+              echo "  mysql:"
+              echo "    image: mysql:8.0"
+              echo "    environment:"
+              echo "      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD}"
+              echo "    volumes:"
+              echo "      - mysql_data:/var/lib/mysql"
+              echo "    restart: unless-stopped"
+              echo "  redis:"
+              echo "    image: redis:7-alpine"
+              echo "    restart: unless-stopped"
+              echo "  caddy:"
+              echo "    image: caddy:2"
+              echo "    container_name: smartmix-caddy"
+              echo "    volumes:"
+              echo "      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile"
+              echo "      - caddy_data:/data"
+              echo "      - caddy_config:/config"
+              echo "    ports:"
+              echo "      - \"80:80\""
+              echo "      - \"443:443\""
+              echo "    depends_on:"
+              echo "      - backend"
+              echo "      - web"
+              echo "    restart: unless-stopped"
+              echo "volumes:"
+              echo "  mysql_data:"
+              echo "  caddy_data:"
+              echo "  caddy_config:"
+            } > "$PROJECT_DIR/deploy/docker-compose.prod.yml"
+
+            cd "$PROJECT_DIR"
             docker compose -f deploy/docker-compose.prod.yml pull
             docker compose -f deploy/docker-compose.prod.yml up -d
