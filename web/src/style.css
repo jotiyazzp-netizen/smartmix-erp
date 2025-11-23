@@ -1,0 +1,35 @@
+:root {
+  --bg: #f5f7fa;
+  --text: #1f1f1f;
+  --max-content-width: 1440px;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body, #app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#app {
+  width: 100%;
+}
+
+.ant-layout {
+  min-height: 100vh;
+}
+
+.container {
+  margin: 0 auto;
+  max-width: var(--max-content-width);
+}

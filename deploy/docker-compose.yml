@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # MySQL 数据库 (本地开发/测试,生产建议使用阿里云 RDS)
+  mysql:
+    image: mysql:8.0
+    container_name: smartmix-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: smartmix
+      MYSQL_USER: smartmix
+      MYSQL_PASSWORD: smartmix_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+
+  # Redis 缓存
+  redis:
+    image: redis:latest
+    container_name: smartmix-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  # 后端 API 服务
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: smartmix-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root_password
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      APP_JWT_SECRET: change-me-in-production
+      ERP_WEBHOOK_TOKEN: change-me-in-production
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+      - redis
+
+  # Web 前端
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    container_name: smartmix-web
+    ports:
+      - "8081:80"
+
+  # Nginx 反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: smartmix-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - web
+
+volumes:
+  mysql-data:
+  redis-data:

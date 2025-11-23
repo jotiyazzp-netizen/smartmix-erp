@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>生产任务单</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "SimSun", serif;
+            font-size: 12px;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            background-color: #f0f0f0;
+            padding: 8px 10px;
+            border-left: 4px solid #4CAF50;
+            margin-bottom: 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        
+        table th, table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+        
+        .info-table td:first-child {
+            width: 150px;
+            font-weight: bold;
+            background-color: #fafafa;
+        }
+        
+        .material-table th {
+            text-align: center;
+        }
+        
+        .material-table td.number {
+            text-align: right;
+        }
+        
+        .cost-summary {
+            text-align: right;
+            font-size: 14px;
+            font-weight: bold;
+            color: #d32f2f;
+            margin-top: 10px;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .signature-area {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+        }
+        
+        .signature-item {
+            text-align: center;
+        }
+        
+        .signature-line {
+            border-bottom: 1px solid #333;
+            width: 150px;
+            margin: 0 auto 5px;
+            height: 30px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 标题 -->
+    <div class="header">
+        <h1>SmartMix 生产任务单</h1>
+        <div class="subtitle">Production Task Sheet</div>
+    </div>
+    
+    <!-- 任务基本信息 -->
+    <div class="section">
+        <div class="section-title">任务基本信息</div>
+        <table class="info-table">
+            <tr>
+                <td>任务单号</td>
+                <td th:text="${data.taskNo}"></td>
+                <td>工程名称</td>
+                <td th:text="${data.projectName}"></td>
+            </tr>
+            <tr>
+                <td>强度等级</td>
+                <td th:text="${data.strengthGrade}"></td>
+                <td>坍落度要求</td>
+                <td th:text="${data.slumpRequirement}"></td>
+            </tr>
+            <tr>
+                <td>需求方量</td>
+                <td th:text="${data.volume} + ' m³'"></td>
+                <td>来源系统</td>
+                <td th:text="${data.sourceSystem}"></td>
+            </tr>
+            <tr>
+                <td>创建人</td>
+                <td th:text="${data.createdBy}"></td>
+                <td>创建时间</td>
+                <td th:text="${data.createdAt}"></td>
+            </tr>
+            <tr th:if="${data.specialRequirements != null}">
+                <td>特殊要求</td>
+                <td colspan="3" th:text="${data.specialRequirements}"></td>
+            </tr>
+        </table>
+    </div>
+    
+    <!-- 选定配比 -->
+    <div class="section">
+        <div class="section-title">选定配比方案</div>
+        <table class="info-table">
+            <tr>
+                <td>配比编号</td>
+                <td th:text="${data.recipeCode}"></td>
+                <td>强度等级</td>
+                <td th:text="${data.recipeStrengthGrade}"></td>
+            </tr>
+            <tr>
+                <td>坍落度</td>
+                <td colspan="3" th:text="${data.recipeSlump}"></td>
+            </tr>
+        </table>
+    </div>
+    
+    <!-- 材料清单 -->
+    <div class="section">
+        <div class="section-title">材料清单</div>
+        <table class="material-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">序号</th>
+                    <th>材料编码</th>
+                    <th>材料名称</th>
+                    <th style="width: 80px;">单位</th>
+                    <th style="width: 120px;">单方用量<br/>(kg/m³)</th>
+                    <th style="width: 120px;">总用量</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="material, iterStat : ${data.materials}">
+                    <td class="number" th:text="${iterStat.count}"></td>
+                    <td th:text="${material.materialCode}"></td>
+                    <td th:text="${material.materialName}"></td>
+                    <td th:text="${material.unit}"></td>
+                    <td class="number" th:text="${#numbers.formatDecimal(material.dosagePerM3, 1, 2)}"></td>
+                    <td class="number" th:text="${#numbers.formatDecimal(material.totalDosage, 1, 2)} + ' ' + ${material.unit}"></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- 成本信息 -->
+    <div class="section" th:if="${data.unitCost != null}">
+        <div class="section-title">理论成本</div>
+        <table class="info-table">
+            <tr>
+                <td>单方成本</td>
+                <td th:text="${#numbers.formatDecimal(data.unitCost, 1, 2)} + ' 元/m³'"></td>
+                <td>总成本</td>
+                <td th:text="${#numbers.formatDecimal(data.totalCost, 1, 2)} + ' 元'"></td>
+            </tr>
+        </table>
+        <div class="cost-summary">
+            总成本：<span th:text="${#numbers.formatDecimal(data.totalCost, 1, 2)}"></span> 元
+        </div>
+    </div>
+    
+    <!-- 签名区 -->
+    <div class="signature-area">
+        <div class="signature-item">
+            <div class="signature-line"></div>
+            <div>调度员签字</div>
+        </div>
+        <div class="signature-item">
+            <div class="signature-line"></div>
+            <div>搅拌楼操作员签字</div>
+        </div>
+        <div class="signature-item">
+            <div class="signature-line"></div>
+            <div>质检员签字</div>
+        </div>
+    </div>
+    
+    <!-- 页脚 -->
+    <div class="footer">
+        <div>生成时间：<span th:text="${data.generatedAt}"></span></div>
+        <div>SmartMix 智能生产与成本执行系统 | 本单据由系统自动生成</div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,36 @@
+services:
+  backend:
+    image: ${ACR_REGISTRY}/smartmix-backend:latest
+    env_file: deploy/.env.production
+    restart: unless-stopped
+  web:
+    image: ${ACR_REGISTRY}/smartmix-web:latest
+    restart: unless-stopped
+  mysql:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+  caddy:
+    image: caddy:2
+    container_name: smartmix-caddy
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+      - web
+    restart: unless-stopped
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:

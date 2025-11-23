@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smartmix-backend
+  labels:
+    app: smartmix-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: smartmix-backend
+  template:
+    metadata:
+      labels:
+        app: smartmix-backend
+    spec:
+      containers:
+      - name: backend
+        image: registry.cn-hangzhou.aliyuncs.com/your-namespace/smartmix-backend:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:mysql://your-rds-host:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "root"
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: "your-password"
+        - name: SPRING_REDIS_HOST
+          value: "your-redis-host"
+        - name: SPRING_REDIS_PORT
+          value: "6379"
+        - name: APP_JWT_SECRET
+          value: "change-me-in-production"
+        - name: ERP_WEBHOOK_TOKEN
+          value: "change-me-in-production"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"

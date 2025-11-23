@@ -1,0 +1,13 @@
+api.adsohm.com {
+  encode gzip
+  route /api* {
+    uri strip_prefix /api
+    reverse_proxy backend:8080
+  }
+  reverse_proxy web:80
+}
+
+app.adsohm.com {
+  encode gzip
+  reverse_proxy web:80
+}
