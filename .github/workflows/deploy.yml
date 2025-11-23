@@ -1,47 +1,45 @@
 name: deploy
+
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+
       - name: Login ACR
         uses: docker/login-action@v3
         with:
           registry: ${{ secrets.ACR_REGISTRY }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
+
       - name: Build backend image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: ${{ secrets.ACR_REGISTRY }}/smartmix-backend:latest
+
       - name: Build web image
         uses: docker/build-push-action@v5
         with:
           context: ./web
           push: true
           tags: ${{ secrets.ACR_REGISTRY }}/smartmix-web:latest
+
   deploy-ecs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -50,21 +48,26 @@ jobs:
           key: ${{ secrets.ECS_SSH_KEY }}
           script: |
             set -e
-            mkdir -p ${{ secrets.PROJECT_DIR }}/deploy
-            if [ ! -f ${{ secrets.PROJECT_DIR }}/deploy/.env.production ]; then
-              echo "SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai" > ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "SPRING_DATASOURCE_USERNAME=${{ secrets.MYSQL_USER }}" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "SPRING_DATASOURCE_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "SPRING_REDIS_HOST=redis" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "SPRING_REDIS_PORT=6379" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
-              echo "ERP_WEBHOOK_TOKEN=${{ secrets.ERP_WEBHOOK_TOKEN }}" >> ${{ secrets.PROJECT_DIR }}/deploy/.env.production
+
+            PROJECT_DIR="${{ secrets.PROJECT_DIR }}"
+            mkdir -p "$PROJECT_DIR/deploy"
+
+            if [ ! -f "$PROJECT_DIR/deploy/.env.production" ]; then
+              echo "SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai" > "$PROJECT_DIR/deploy/.env.production"
+              echo "SPRING_DATASOURCE_USERNAME=${{ secrets.MYSQL_USER }}" >> "$PROJECT_DIR/deploy/.env.production"
+              echo "SPRING_DATASOURCE_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> "$PROJECT_DIR/deploy/.env.production"
+              echo "SPRING_REDIS_HOST=redis" >> "$PROJECT_DIR/deploy/.env.production"
+              echo "SPRING_REDIS_PORT=6379" >> "$PROJECT_DIR/deploy/.env.production"
+              echo "APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}" >> "$PROJECT_DIR/deploy/.env.production"
+              echo "ERP_WEBHOOK_TOKEN=${{ secrets.ERP_WEBHOOK_TOKEN }}" >> "$PROJECT_DIR/deploy/.env.production"
             fi
-            if [ ! -d ${{ secrets.PROJECT_DIR }}/deploy/caddy ]; then
-              mkdir -p ${{ secrets.PROJECT_DIR }}/deploy/caddy
+
+            if [ ! -d "$PROJECT_DIR/deploy/caddy" ]; then
+              mkdir -p "$PROJECT_DIR/deploy/caddy"
             fi
-            if [ ! -f ${{ secrets.PROJECT_DIR }}/deploy/caddy/Caddyfile ]; then
-              cat > ${{ secrets.PROJECT_DIR }}/deploy/caddy/Caddyfile <<CADDY
+
+            if [ ! -f "$PROJECT_DIR/deploy/caddy/Caddyfile" ]; then
+              cat > "$PROJECT_DIR/deploy/caddy/Caddyfile" <<CADDY
 ${{ secrets.DOMAIN_API }} {
   encode gzip
   route /api* {
@@ -80,15 +83,16 @@ ${{ secrets.DOMAIN_APP }} {
 }
 CADDY
             fi
-            if [ ! -f ${{ secrets.PROJECT_DIR }}/deploy/docker-compose.prod.yml ]; then
-              cat > ${{ secrets.PROJECT_DIR }}/deploy/docker-compose.prod.yml <<COMPOSE
+
+            if [ ! -f "$PROJECT_DIR/deploy/docker-compose.prod.yml" ]; then
+              cat > "$PROJECT_DIR/deploy/docker-compose.prod.yml" <<COMPOSE
 services:
   backend:
-    image: ${ACR_REGISTRY}/smartmix-backend:latest
+    image: ${{ secrets.ACR_REGISTRY }}/smartmix-backend:latest
     env_file: deploy/.env.production
     restart: unless-stopped
   web:
-    image: ${ACR_REGISTRY}/smartmix-web:latest
+    image: ${{ secrets.ACR_REGISTRY }}/smartmix-web:latest
     restart: unless-stopped
   mysql:
     image: mysql:8.0
@@ -114,13 +118,14 @@ services:
       - backend
       - web
     restart: unless-stopped
+
 volumes:
   mysql_data:
   caddy_data:
   caddy_config:
 COMPOSE
             fi
-            export ACR_REGISTRY=${{ secrets.ACR_REGISTRY }}
-            cd ${{ secrets.PROJECT_DIR }}
+
+            cd "$PROJECT_DIR"
             docker compose -f deploy/docker-compose.prod.yml pull
             docker compose -f deploy/docker-compose.prod.yml up -d
