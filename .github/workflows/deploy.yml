@@ -56,6 +56,11 @@ jobs:
               echo "ERP_WEBHOOK_TOKEN=${{ secrets.ERP_WEBHOOK_TOKEN }}"
             } > "$PROJECT_DIR/deploy/.env.production"
 
+            # Provide Compose-level environment for variable substitution
+            {
+              echo "SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}"
+            } > "$PROJECT_DIR/deploy/.env"
+
             cd "$PROJECT_DIR/deploy"
             docker compose -f docker-compose.prod.yml down || true
             docker volume rm mysql_data 2>/dev/null || true
