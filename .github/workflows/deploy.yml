@@ -9,24 +9,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Login ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.ACR_REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Set image tags
+        env:
+          ACR_HOST: crpi-vvd63gd4gtn8gczl.cn-hangzhou.personal.cr.aliyuncs.com
+          ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
+        run: |
+          echo "ACR_HOST=$ACR_HOST" >> $GITHUB_ENV
+          echo "ACR_NAMESPACE=$ACR_NAMESPACE" >> $GITHUB_ENV
+          echo "BACKEND_IMAGE=$ACR_HOST/$ACR_NAMESPACE/smartmix-backend:latest" >> $GITHUB_ENV
+          echo "WEB_IMAGE=$ACR_HOST/$ACR_NAMESPACE/smartmix-web:latest" >> $GITHUB_ENV
+
+      - name: Login ACR (instance domain via shell)
+        env:
+          ACR_HOST: crpi-vvd63gd4gtn8gczl.cn-hangzhou.personal.cr.aliyuncs.com
+        run: |
+          echo "Login ACR: $ACR_HOST"
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login "$ACR_HOST" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
+
       - name: Build and push backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/smartmix-backend:latest
+          tags: ${{ env.BACKEND_IMAGE }}
+
       - name: Build and push web
         uses: docker/build-push-action@v5
         with:
           context: ./web
           push: true
-          tags: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/smartmix-web:latest
+          tags: ${{ env.WEB_IMAGE }}
 
   deploy_ecs:
     needs: build_and_push
@@ -40,15 +53,15 @@ jobs:
           key: ${{ secrets.ECS_SSH_KEY }}
           script: |
             set -e
-            ACR_REGISTRY="${{ secrets.ACR_REGISTRY }}"
+            ACR_HOST="crpi-vvd63gd4gtn8gczl.cn-hangzhou.personal.cr.aliyuncs.com"
             ACR_NAMESPACE="${{ secrets.ACR_NAMESPACE }}"
             PROJECT_DIR="${{ secrets.PROJECT_DIR }}"
             DOMAIN_API="${{ secrets.DOMAIN_API }}"
             DOMAIN_APP="${{ secrets.DOMAIN_APP }}"
             MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
 
-            BACKEND_IMAGE="${ACR_REGISTRY}/${ACR_NAMESPACE}/smartmix-backend:latest"
-            WEB_IMAGE="${ACR_REGISTRY}/${ACR_NAMESPACE}/smartmix-web:latest"
+            BACKEND_IMAGE="$ACR_HOST/$ACR_NAMESPACE/smartmix-backend:latest"
+            WEB_IMAGE="$ACR_HOST/$ACR_NAMESPACE/smartmix-web:latest"
 
             mkdir -p "$PROJECT_DIR/deploy" "$PROJECT_DIR/deploy/caddy"
 
