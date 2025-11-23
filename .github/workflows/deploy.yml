@@ -46,7 +46,7 @@ jobs:
             mkdir -p "$PROJECT_DIR"
 
             {
-              echo "SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/smartmix?useSSL=false&serverTimezone=Asia/Shanghai"
+              echo "SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/smartmix?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai"
               echo "SPRING_DATASOURCE_USERNAME=root"
               echo "SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}"
               echo "SPRING_REDIS_HOST=redis"
@@ -55,6 +55,13 @@ jobs:
               echo "APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}"
               echo "ERP_WEBHOOK_TOKEN=${{ secrets.ERP_WEBHOOK_TOKEN }}"
             } > "$PROJECT_DIR/deploy/.env.production"
+
+            # Fallback: generate strong APP_JWT_SECRET if not provided
+            if [ -z "${{ secrets.APP_JWT_SECRET }}" ]; then
+              echo "No APP_JWT_SECRET provided in Secrets. Generating a strong one..."
+              RAND=$(head -c 64 /dev/urandom | od -An -tx1 | tr -d ' \n')
+              sed -i "s/^APP_JWT_SECRET=.*/APP_JWT_SECRET=${RAND}/" "$PROJECT_DIR/deploy/.env.production"
+            fi
 
             # Provide Compose-level environment for variable substitution
             {
@@ -67,6 +74,10 @@ jobs:
             docker compose -f docker-compose.prod.yml up -d --build
 
             sleep 20
+            ERP_TOKEN="${{ secrets.ERP_WEBHOOK_TOKEN }}"
+            if [ -n "$ERP_TOKEN" ]; then
+              curl -s -X POST -H "X-ERP-TOKEN: $ERP_TOKEN" "http://${DOMAIN_API_HOST}/api/auth/reset-admin" || true
+            fi
             curl -I --max-time 10 "http://${DOMAIN_API_HOST}/swagger-ui.html" || true
             curl -I --max-time 10 "http://${DOMAIN_APP_HOST}/" || true
             if [ -n "$DOMAIN_ROOT_HOST" ]; then curl -I --max-time 10 "http://${DOMAIN_ROOT_HOST}/" || true; fi

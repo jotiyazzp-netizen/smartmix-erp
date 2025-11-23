@@ -7,10 +7,11 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$SPRING_DATASOURCE_PASSWORD || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
+      start_period: 60s
     restart: unless-stopped
 
   redis:
@@ -29,6 +30,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 20
+      start_period: 60s
     depends_on:
       mysql:
         condition: service_healthy

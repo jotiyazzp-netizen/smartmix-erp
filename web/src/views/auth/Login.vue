@@ -10,8 +10,9 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const formState = reactive({
-  username: '',
-  password: ''
+  username: 'admin',
+  password: 'admin123',
+  remember: true
 })
 
 const loading = ref(false)
@@ -27,7 +28,7 @@ const onFinish = async (values: any) => {
     const res: any = await request.post('/auth/login', values)
     
     // If backend returns token directly or in data
-    const token = res.token || res.data?.token
+    const token = res?.data?.token || res?.token
     const roles = res.roles || res.data?.roles || ['ADMIN'] // Default to ADMIN for dev if missing
     
     if (token) {
@@ -38,7 +39,7 @@ const onFinish = async (values: any) => {
       router.push('/dashboard')
     } else {
        // Fallback for demo if backend not ready
-       if (values.username === 'admin' && values.password === '123456') {
+       if (values.username === 'admin' && values.password === 'admin123') {
           userStore.setToken('mock-token')
           userStore.setRoles(['ADMIN'])
           userStore.setInfo({ name: 'Admin' })
@@ -51,14 +52,15 @@ const onFinish = async (values: any) => {
   } catch (error: any) {
     console.error(error)
     // Fallback for demo
-    if (values.username === 'admin' && values.password === '123456') {
+    if (values.username === 'admin' && values.password === 'admin123') {
         userStore.setToken('mock-token')
         userStore.setRoles(['ADMIN'])
         userStore.setInfo({ name: 'Admin' })
         message.success('Mock登录成功 (Network Error)')
         router.push('/dashboard')
     } else {
-        message.error(error.response?.data?.message || '登录失败')
+        const msg = error?.response?.data?.message || '登录失败'
+        message.error(msg)
     }
   } finally {
     loading.value = false
@@ -68,7 +70,12 @@ const onFinish = async (values: any) => {
 
 <template>
   <div class="login-container">
-    <a-card title="SmartMix 智能生产系统" class="login-card">
+    <div class="brand">
+      <div class="logo">SmartMix</div>
+      <div class="subtitle">智能生产 ERP</div>
+    </div>
+    <a-card class="login-card">
+      <div class="card-title">账户登录</div>
       <a-form
         :model="formState"
         name="basic"
@@ -94,6 +101,11 @@ const onFinish = async (values: any) => {
         </a-form-item>
 
         <a-form-item>
+          <a-checkbox v-model:checked="formState.remember">记住我</a-checkbox>
+          <a style="float:right" href="/">忘记密码</a>
+        </a-form-item>
+
+        <a-form-item>
           <a-button type="primary" html-type="submit" block :loading="loading">登录</a-button>
         </a-form-item>
       </a-form>
@@ -102,16 +114,10 @@ const onFinish = async (values: any) => {
 </template>
 
 <style scoped>
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  background: #f5f7fa;
-  padding: 24px;
-}
-.login-card {
-  width: 100%;
-  max-width: 520px;
-}
+.login-container {display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;background:linear-gradient(120deg,#1f2a44,#0c1628 60%,#091322);padding:24px}
+.brand {text-align:center;color:#fff;margin-bottom:24px}
+.brand .logo {font-size:32px;font-weight:700;letter-spacing:1px}
+.brand .subtitle {opacity:.8}
+.login-card {width:100%;max-width:520px;border-radius:12px;box-shadow:0 10px 24px rgba(0,0,0,.35)}
+.card-title {font-size:18px;font-weight:600;margin-bottom:12px}
 </style>
