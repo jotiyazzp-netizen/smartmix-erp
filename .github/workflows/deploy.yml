@@ -58,8 +58,12 @@ jobs:
             PROJECT_DIR="${{ secrets.PROJECT_DIR }}"
             DOMAIN_API_RAW="${{ secrets.DOMAIN_API }}"
             DOMAIN_APP_RAW="${{ secrets.DOMAIN_APP }}"
+            DOMAIN_ROOT_RAW="${{ secrets.DOMAIN_ROOT }}"
             DOMAIN_API_HOST="$(echo "$DOMAIN_API_RAW" | sed -E 's#^https?://##; s#/*$##')"
             DOMAIN_APP_HOST="$(echo "$DOMAIN_APP_RAW" | sed -E 's#^https?://##; s#/*$##')"
+            DOMAIN_ROOT_HOST="$(echo "$DOMAIN_ROOT_RAW" | sed -E 's#^https?://##; s#/*$##')"
+            APP_HOSTS="$DOMAIN_APP_HOST"
+            if [ -n "$DOMAIN_ROOT_HOST" ]; then APP_HOSTS="$DOMAIN_ROOT_HOST, $DOMAIN_APP_HOST"; fi
             MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
             GIT_REPO_URL="https://github.com/jotiyazzp-netizen/smartmix-erp.git"
 
@@ -84,7 +88,7 @@ jobs:
               echo "SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}"
               echo "SPRING_REDIS_HOST=redis"
               echo "SPRING_REDIS_PORT=6379"
-              echo "SPRING_PROFILES_ACTIVE=local"
+              echo "SPRING_PROFILES_ACTIVE=prod"
               echo "APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}"
               echo "ERP_WEBHOOK_TOKEN=${{ secrets.ERP_WEBHOOK_TOKEN }}"
             } > "$PROJECT_DIR/deploy/.env.production"
@@ -95,7 +99,7 @@ jobs:
               echo "  reverse_proxy http://backend:8080"
               echo "}"
               echo ""
-              echo "${DOMAIN_APP_HOST} {"
+              echo "${APP_HOSTS} {"
               echo "  encode gzip"
               echo "  route /api* {"
               echo "    uri strip_prefix /api"
@@ -113,6 +117,9 @@ jobs:
               echo "    restart: unless-stopped"
               echo "    ports:"
               echo "      - \"8080:8080\""
+              echo "    depends_on:"
+              echo "      mysql:"
+              echo "        condition: service_healthy"
               echo "  web:"
               echo "    image: ${WEB_IMAGE}"
               echo "    restart: unless-stopped"
@@ -204,7 +211,7 @@ jobs:
               echo "  reverse_proxy http://${BACKEND_IP}:8080"
               echo "}"
               echo ""
-              echo "${DOMAIN_APP_HOST} {"
+              echo "${APP_HOSTS} {"
               echo "  encode gzip"
               echo "  route /api* {"
               echo "    uri strip_prefix /api"
@@ -217,3 +224,4 @@ jobs:
             sleep 10
             curl -I --max-time 10 "http://${DOMAIN_API_HOST}/swagger-ui.html" || true
             curl -I --max-time 10 "http://${DOMAIN_APP_HOST}/" || true
+            if [ -n "$DOMAIN_ROOT_HOST" ]; then curl -I --max-time 10 "http://${DOMAIN_ROOT_HOST}/" || true; fi
